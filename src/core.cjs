@@ -40,7 +40,7 @@ function safeFilename(title, instant) {
   return `${jstDate(instant)}-${clean}.md`;
 }
 function makeIntervals(duration, size = 1200) {
-  if (!Number.isInteger(duration) || duration <= 0 || duration > 7200) throw new Error('動画の長さは2時間以内である必要があります。');
+  if (!Number.isInteger(duration) || duration <= 0 || duration > 18000) throw new Error('動画の長さは5時間以内である必要があります。');
   const intervals=[];
   for (let start = 0; start < duration; start += size) intervals.push({start, end: Math.min(duration,start+size), inputStart: Math.max(0,start-5), inputEnd: Math.min(duration,start+size+5)});
   return intervals;

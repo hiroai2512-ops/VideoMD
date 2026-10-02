@@ -18,7 +18,7 @@ Windows画面 → URL検証 → メタデータ取得 → Vertex AIで文字起�
 
 ### 初期実装の契約
 
-2026-10-02、ユーザーがサンプル本文の確認を完了し精度を了承。本文にタイムスタンプは不要であり、モデルが生成した不正確な時刻を出力や完全性判定に使わない。公開YouTube URLを1件ずつ入力する主要導線から実装する。字幕の取得は文字起こしに使わず、動画音声をVertexへ渡す。外国語と2時間への対応は実装し、別の実動画による精度受け入れを残作業として明示する。
+2026-10-02、ユーザーがサンプル本文の確認を完了し精度を了承。本文にタイムスタンプは不要であり、モデルが生成した不正確な時刻を出力や完全性判定に使わない。公開YouTube URLを1件ずつ入力する主要導線から実装する。字幕の取得は文字起こしに使わず、動画音声をVertexへ渡す。外国語と5時間への対応は実装し、別の実動画による精度受け入れを残作業として明示する。
 
 - Google公式 `google-auth-library` 11.1.0でADCを使用。通常の認証探索に加え、設定でユーザーが既存ADCファイルを選択できる。CodexのMSIX内ADCも探索するが、認証ファイルを移動・コピーしない。OAuth userinfoのメールと設定した期待アカウントを照合し、異なる場合はAPI処理を止める。[公式ライブラリ資料](https://docs.cloud.google.com/nodejs/docs/reference/google-auth-library/latest)を同日確認。
 - メタデータはYouTube公開watchページの構造化メタデータとoEmbedから取得し、必須値・日時・長さを検証。APIキーを新たに作成しない。ページ仕様変更で必須値を取得できない場合は明示的に失敗し、AIで補完しない。個別の実画面値との照合が必要。
@@ -27,11 +27,11 @@ Windows画面 → URL検証 → メタデータ取得 → Vertex AIで文字起�
 - HTTP 429/500/502/503/504は最大3回まで待機間隔を増やして再試行。使用量が返った応答は成功・形式不正を問わず概算台帳に保存する。費用概算はUSD、JPYのCloud Billing実績と区別する。
 - 予算/PubSubによる正式費用通知はクラウド接続済みの場合に起動。未設定では「料金通知未接続」を明示する。通知のための基準予算は支出の停止上限と扱わない。
 
-## 最長2時間の処理案
+## 最長5時間の処理案
 
-指定モデルの[3.8 Flash仕様](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-8-flash)と[3.5 Flash-Lite仕様](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-5-flash-lite)では、音声付き動画の目安は1入力約45分。2時間を1回で処理できる前提にしない。
+指定モデルの[3.8 Flash仕様](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-8-flash)と[3.5 Flash-Lite仕様](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-5-flash-lite)では、音声付き動画の目安は1入力約45分。5時間を1回で処理できる前提にしない。
 
-[動画処理の公式仕様](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/capabilities/video-understanding)には`videoMetadata`による開始・終了区間指定がある。約20分の区間に分けて指定する案（2時間なら基本6区間）。YouTube URLとの組み合わせを実証するまでは、この案が動作確認済みとは扱わない。プロンプトで時間帯を指定するだけの処理を入力分割の代わりにしない。
+[動画処理の公式仕様](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/capabilities/video-understanding)には`videoMetadata`による開始・終了区間指定がある。約20分の区間に分けて指定する案（5時間なら基本15区間）。YouTube URLとの組み合わせを実証するまでは、この案が動作確認済みとは扱わない。プロンプトで時間帯を指定するだけの処理を入力分割の代わりにしない。
 
 - 分割境界には短い重なりを設け、内部の発話時刻・区間IDで照合し重複と欠落を扱う。表示用タイムスタンプは必須にしない案。
 - 区間ごとに文字起こし・整文・翻訳を行い、順序通り結合する。全体の話題から必要な見出しとタグを生成する。全文を再生成して省略する方式は避ける。

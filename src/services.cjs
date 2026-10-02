@@ -48,7 +48,7 @@ function parseMetadata(html,oembed,url) {
   const title=oembed?.title || metas['og:title'];
   const channel=oembed?.author_name;
   if(!title||!channel||!publishedAt||!Number.isFinite(Date.parse(publishedAt))||!durationSeconds)throw new Error('YouTubeのタイトル・投稿日時・長さを取得できませんでした。公開動画か確認してください。');
-  if(durationSeconds>7200)throw new Error('この動画は2時間を超えています。2時間以内の動画を指定してください。');
+  if(durationSeconds>18000)throw new Error('この動画は5時間を超えています。5時間以内の動画を指定してください。');
   return {url,title,channel,publishedAt,durationSeconds};
 }
 async function getMetadata(input,signal) {

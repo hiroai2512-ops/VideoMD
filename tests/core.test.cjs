@@ -9,3 +9,20 @@ test('同名保存は既存ファイルを保持し一時ファイルを残さ�
 test('動画メタデータが欠ければ補完せず失敗',()=>{const html='<meta content="PT17M38S" itemprop="duration"><meta itemprop="datePublished" content="2026-10-02T02:00:04-07:00">';const meta=parseMetadata(html,{title:'タイトル',author_name:'投稿者'},'url');assert.equal(meta.durationSeconds,1058);assert.throws(()=>parseMetadata('<meta itemprop="duration" content="PT1S">',{title:'title',author_name:'channel'},'url'));});
 test('STOP以外でも返却使用量は記録し未完了を拒否',async()=>{let usage;const vertex=new Vertex({projectId:'test-project',model:c.MODELS[0]},async()=>'private-token',{onUsage:u=>{usage=u;},fetchImpl:async()=>({ok:true,json:async()=>({usageMetadata:{promptTokenCount:10},candidates:[{finishReason:'MAX_TOKENS',content:{parts:[{text:'{}'}]}}]})})});await assert.rejects(vertex.generate([{text:'test'}],100),/中断/);assert.equal(usage.promptTokenCount,10);});
 test('概算は推論出力を含み料金改定日を扱う',()=>{assert.equal(c.estimateUsd(c.MODELS[0],{promptTokenCount:1000000,candidatesTokenCount:1000000,thoughtsTokenCount:1000000},'2026-10-02'),8.25);assert.equal(c.estimateUsd(c.MODELS[0],{promptTokenCount:1000000},'2027-01-01'),1.5);});
+test('複数話者と不明の発話順を保持し人物名・形式注入・欠落を拒否する',()=>{
+ const data={audio_accessible:true,complete:true,paragraphs:[{speaker:'話者1',text:'質問です。'},{speaker:'話者2',text:'回答です。'},{speaker:'話者1',text:'追加質問です。'},{speaker:'話者不明',text:'重なった声です。'}]};
+ const paragraphs=c.validateTranscript(data,{requireSpeakers:true});assert.deepEqual(paragraphs.map(p=>p.speaker),['話者1','話者2','話者1','話者不明']);
+ for(const speaker of [undefined,'田中','話者0','話者100','話者1\n## 注入'])assert.throws(()=>c.validateTranscript({...data,paragraphs:[{speaker,text:'本文'}]},{requireSpeakers:true}),/話者/);
+ assert.equal(c.validateTranscript({...data,paragraphs:[{text:'旧本文'}]})[0].speaker,undefined);
+ const md=c.renderMarkdown({title:'対談',url:'url',channel:'投稿者',publishedAt:'2026-10-02'},'2026-10-02',['一','二','三','四','五'],paragraphs);
+ assert.match(md,/\*\*話者1：\*\* 質問です。/);assert.match(md,/\*\*話者2：\*\* 回答です。/);assert.match(md,/\*\*話者不明：\*\*/);
+ assert.ok(md.indexOf('質問です。')<md.indexOf('回答です。'));assert.ok(md.indexOf('回答です。')<md.indexOf('追加質問です。'));
+});
+test('並列区間の同番号を統合せず旧区間に話者を創作しない',()=>{
+ const md=c.renderMarkdown({title:'長い対談',url:'url',channel:'投稿者',publishedAt:'2026-10-02'},'2026-10-02',['一','二','三','四','五'],[{text:'以前の本文',heading:''},{text:'最初の質問',speaker:'話者1',speakerScope:1},{text:'次の区間の別の声',speaker:'話者1',speakerScope:2}]);
+ assert.match(md,/話者不明：\*\* 以前の本文/);assert.match(md,/話者1（区間1）/);assert.match(md,/話者1（区間2）/);assert.match(md,/同一人物とは限りません/);
+});
+test('動画音声のリクエストに話者交代と必須speakerを含める',async()=>{
+ let request;const vertex=new Vertex({projectId:'test-project',model:c.MODELS[0]},async()=>'test-token',{fetchImpl:async(_url,options)=>{request=JSON.parse(options.body);return {ok:true,json:async()=>({candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify({audio_accessible:true,complete:true,paragraphs:[{speaker:'話者1',text:'本文'}]})}]}}]})};}});
+ await vertex.transcribe({url:'https://www.youtube.com/watch?v=v64FpYCT6BA'},c.makeIntervals(1200)[0]);const prompt=request.contents[0].parts.at(-1).text;assert.match(prompt,/話者が交代するたび/);assert.match(prompt,/各段落のspeakerは必須/);assert.match(prompt,/区別不能なら話者不明/);
+});

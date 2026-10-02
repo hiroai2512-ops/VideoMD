@@ -39,7 +39,7 @@ class Engine {
       }
       const metadata=previous?.metadata || await this.metadataLoader(url,controller.signal);
       if(!metadata.durationSeconds)throw new Error('動画の長さを取得できませんでした。');
-      job=previous || {id:crypto.randomUUID(),fingerprint,startedAt:new Date().toISOString(),metadata,intervals:makeIntervals(metadata.durationSeconds),chunks:[],usage:[],model:settings.model};
+      job=previous || {id:crypto.randomUUID(),fingerprint,startedAt:new Date().toISOString(),metadata,intervals:makeIntervals(metadata.durationSeconds),chunks:[],usage:[],model:settings.model,speakerLabels:true};
       await this.store.write('job',job);
       const vertex=this.vertexFactory(settings,auth.getToken,{onUsage:async usage=>this.persist(async()=>{
         const record={at:new Date().toISOString(),model:settings.model,usage,estimatedUsd:estimateUsd(settings.model,usage,new Date())};
@@ -58,7 +58,7 @@ class Engine {
             controller.signal.throwIfAborted();
             this.emit({phase:'transcribing',message:`文字起こし中：完了 ${completed()}/${job.intervals.length} 区間`,progress:completed()/job.intervals.length});
             const result=await this.request(()=>vertex.transcribe(metadata,job.intervals[index],controller.signal),controller.signal);
-            const paragraphs=validateTranscript(result);
+            const paragraphs=validateTranscript(result,{requireSpeakers:job.speakerLabels===true}).map(p=>({...p,...(p.speaker?{speakerScope:index+1}:{})}));
             await this.persist(async()=>{job.chunks[index]=paragraphs;await this.store.write('job',job);});
             this.emit({progress:completed()/job.intervals.length,message:`文字起こし中：完了 ${completed()}/${job.intervals.length} 区間`});
           }catch(error){failure??=error;}

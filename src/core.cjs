@@ -45,7 +45,7 @@ function makeIntervals(duration, size = 1200) {
   for (let start = 0; start < duration; start += size) intervals.push({start, end: Math.min(duration,start+size), inputStart: Math.max(0,start-5), inputEnd: Math.min(duration,start+size+5)});
   return intervals;
 }
-function validateTranscript(data) {
+function validateTranscript(data,{requireSpeakers=false}={}) {
   if (data?.audio_accessible !== true) throw new Error('動画の音声を取得できませんでした。公開状態を確認してください。');
   if (data.complete !== true || !Array.isArray(data.paragraphs) || !data.paragraphs.length) throw new Error('最後までの文字起こしが返りませんでした。再開してください。');
   if (data.paragraphs.length > 1000) throw new Error('応答の段落数が不正です。');
@@ -56,7 +56,9 @@ function validateTranscript(data) {
     if (characters > 300000) throw new Error('本文が処理上限を超えました。');
     const heading = typeof item.heading === 'string' ? item.heading.trim().replace(/[\r\n]/g,' ') : '';
     if (heading.length > 60 || (heading && ![2,3].includes(item.level))) throw new Error('見出しの形式が不正です。');
-    return {text:item.text.trim(),heading,level:heading ? item.level : 2};
+    const speaker=item.speaker;
+    if ((requireSpeakers||speaker!==undefined) && (typeof speaker!=='string'||!/^話者(?:[1-9][0-9]?|不明)$/.test(speaker))) throw new Error('話者を区別する応答形式が不正です。再開してください。');
+    return {text:item.text.trim(),heading,level:heading ? item.level : 2,...(speaker===undefined?{}:{speaker})};
   });
 }
 function validateTags(tags) {
@@ -69,9 +71,18 @@ function renderMarkdown(metadata,startedAt,tags,paragraphs) {
   const lines=['---'];
   for (const [name,value] of Object.entries({title:metadata.title,source_url:metadata.url,channel:metadata.channel,published_at:metadata.publishedAt,transcribed_at:startedAt})) lines.push(`${name}: ${JSON.stringify(value)}`);
   lines.push('tags:', ...validateTags(tags).map(tag=>`  - ${JSON.stringify(tag)}`), '---','');
+  const labelled=paragraphs.some(p=>p.speaker);
+  const scopes=new Set(paragraphs.filter(p=>p.speaker).map(p=>p.speakerScope));
+  const scoped=scopes.size>1||[...scopes].some(scope=>scope>1);
+  if(labelled&&scoped)lines.push('> 話者番号は各区間内の識別名です。異なる区間の同じ番号は、同一人物とは限りません。','');
+  if(labelled&&paragraphs.some(p=>!p.speaker))lines.push('> 以前に処理した区間の話者情報は未取得のため「話者不明」と表示します。','');
   for (const paragraph of paragraphs) {
     if(paragraph.heading) lines.push(`${'#'.repeat(paragraph.level)} ${paragraph.heading}`,'');
-    lines.push(paragraph.text,'');
+    if(labelled){
+      const speaker=paragraph.speaker||'話者不明';
+      const scope=scoped&&paragraph.speakerScope?`（区間${paragraph.speakerScope}）`:'';
+      lines.push(`**${speaker}${scope}：** ${paragraph.text}`,'');
+    }else lines.push(paragraph.text,'');
   }
   return lines.join('\n');
 }

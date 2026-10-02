@@ -21,7 +21,7 @@ test('受付は原子的でURL正規化、秘密値を除いた設定snapshotを
   await f.queue.cancel();await until(()=>!f.queue.state.busy);await f.queue.serial;
 });
 test('2件起動、20件待機の上限と1件失敗時の独立した進行',async t=>{
-  const f=await fixture(t);await f.queue.enqueue(Array.from({length:22},(_,i)=>url(i)),f.settings);
+  const f=await fixture(t,{maxPending:20});await f.queue.enqueue(Array.from({length:22},(_,i)=>url(i)),f.settings);
   await until(()=>f.starts.length===2);assert.equal(f.queue.state.activeCount,2);assert.equal(f.queue.state.pendingCount,20);
   await assert.rejects(f.queue.enqueue([url(30)],f.settings),/上限/);assert.equal(f.queue.state.items.length,22);
   f.controls.get(f.starts[0].jobStore.root).reject(new Error('one failure'));
@@ -89,4 +89,34 @@ test('実Engineを2動画接続してもAPI合計は2件、別々の本文と台
   await queue.enqueue([url(1),url(2)],f.settings);await until(()=>queue.state.items.every(i=>i.phase==='complete')&&!queue.state.busy);await queue.serial;
   assert.equal(peak,2);
   for(const item of queue.state.items){const md=await fs.readFile(item.outputPath,'utf8');const id=item.url.slice(-11);assert.ok(md.indexOf(`${id}:0`)<md.indexOf(`${id}:1200`));assert.ok(md.indexOf(`${id}:1200`)<md.indexOf(`${id}:2400`));const store=new Store(path.join(f.root,'jobs',item.id));assert.equal((await store.read('usage',[])).length,3);assert.equal((await store.read('job')).chunks.length,3);}
+});
+test('100本の待機場は実行2本と別枠で上限を守り空いた枠を先頭から補充',async t=>{
+ const f=await fixture(t);const added=await f.queue.enqueue(Array.from({length:102},(_,i)=>url(i)),f.settings);
+ await until(()=>f.starts.length===2);assert.equal(f.queue.state.pendingCount,100);assert.equal(f.queue.state.availablePending,0);assert.equal(f.queue.state.availableSlots,0);
+ await assert.rejects(f.queue.enqueue([url(200)],f.settings),/上限/);assert.equal(f.queue.state.items.length,102);
+ f.controls.get(f.starts[1].jobStore.root).complete();await until(()=>f.starts.length===3);
+ assert.equal(f.starts[2].input.url,added[2].url);assert.equal(f.queue.state.activeCount,2);assert.equal(f.queue.state.availablePending,1);
+ await f.queue.cancel();await until(()=>!f.queue.state.busy);await f.queue.serial;
+});
+test('上下操作の待機順を保存して先頭から実行、実行中と不正方向は移動不可',async t=>{
+ const f=await fixture(t);const items=await f.queue.enqueue([url(1),url(2),url(3),url(4),url(5)],f.settings);await until(()=>f.starts.length===2);
+ await f.queue.moveQueued(items[4].id,-1);await f.queue.moveQueued(items[4].id,-1);
+ const order=f.queue.state.items.filter(i=>i.phase==='queued').map(i=>i.id);assert.deepEqual(order,[items[4].id,items[2].id,items[3].id]);
+ assert.deepEqual((await f.store.read('queue')).items.filter(i=>i.phase==='queued').map(i=>i.id),order);
+ await assert.rejects(f.queue.moveQueued(items[0].id,1),/順番待ち/);await assert.rejects(f.queue.moveQueued(items[4].id,2),/方向/);
+ f.controls.get(f.starts[0].jobStore.root).complete();await until(()=>f.starts.length===3);assert.equal(f.starts[2].input.url,items[4].url);
+ await f.queue.cancel();await until(()=>!f.queue.state.busy);await f.queue.serial;
+});
+test('混雑で1動画へ縮退すると既存2本を保持し1本ずつ自動補充',async t=>{
+ const f=await fixture(t);const items=await f.queue.enqueue([url(1),url(2),url(3),url(4)],f.settings);await until(()=>f.starts.length===2);
+ f.queue.pool.reduce();assert.equal(f.queue.state.effectiveMaxActive,1);assert.equal(f.queue.state.apiLimit,1);
+ f.controls.get(f.starts[0].jobStore.root).complete();await until(()=>f.queue.state.activeCount===1);assert.equal(f.starts.length,2);
+ f.controls.get(f.starts[1].jobStore.root).complete();await until(()=>f.starts.length===3);assert.equal(f.queue.state.activeCount,1);assert.equal(f.starts[2].input.url,items[2].url);
+ f.controls.get(f.starts[2].jobStore.root).complete();await until(()=>f.starts.length===4);assert.equal(f.starts[3].input.url,items[3].url);assert.equal(f.queue.state.activeCount,1);
+ await f.queue.cancel();await until(()=>!f.queue.state.busy);await f.queue.serial;
+});
+test('移動の保存失敗時は元の順番を保つ',async t=>{
+ const f=await fixture(t);const items=await f.queue.enqueue([url(1),url(2),url(3),url(4)],f.settings);await until(()=>f.starts.length===2);await f.queue.serial;
+ const original=f.store.write;f.store.write=async()=>{throw new Error('disk full');};await assert.rejects(f.queue.moveQueued(items[3].id,-1),/disk full/);f.store.write=original;
+ assert.deepEqual(f.queue.state.items.filter(i=>i.phase==='queued').map(i=>i.id),[items[2].id,items[3].id]);await f.queue.cancel();await until(()=>!f.queue.state.busy);await f.queue.serial;
 });

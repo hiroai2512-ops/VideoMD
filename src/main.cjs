@@ -39,7 +39,7 @@ app.whenReady().then(async()=>{
   engine=new Queue(store,{engineFactory:(jobStore,options)=>new Engine(jobStore,options),onState:value=>send('state',value)});
   await engine.restore();
   session.defaultSession.setPermissionRequestHandler((_contents,_permission,callback)=>callback(false));
-  window=new BrowserWindow({show:!process.argv.includes('--smoke-test'),width:1140,height:820,minWidth:760,minHeight:650,title:'VideoMD',backgroundColor:'#f5f4ef',webPreferences:{preload:path.join(__dirname,'preload.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true}});
+  window=new BrowserWindow({show:!process.argv.includes('--smoke-test'),width:1440,height:900,minWidth:900,minHeight:650,title:'VideoMD',backgroundColor:'#f5f4ef',webPreferences:{preload:path.join(__dirname,'preload.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true}});
   window.webContents.setWindowOpenHandler(()=>({action:'deny'}));
   window.webContents.on('will-navigate',event=>event.preventDefault());
   window.setMenuBarVisibility(false);
@@ -54,6 +54,7 @@ app.whenReady().then(async()=>{
   register('verify-auth',async()=>{const auth=await createAuth(validateSettings(settings));return {email:auth.email};});
   register('start',async input=>input.resume===true?engine.resume(input.id,settings):engine.enqueue(input.urls||[input.url],settings));
   register('cancel',id=>engine.cancel(id));
+  register('move-queued',(id,direction)=>engine.moveQueued(id,direction));
   register('open-output',async id=>{const item=engine.getItem(id);if(!item?.outputPath)throw new Error('保存済みファイルがありません。');return shell.openPath(item.outputPath);});
   register('open-folder',id=>{const item=engine.getItem(id);if(item?.outputPath)shell.showItemInFolder(item.outputPath);});
   register('poll-billing',async()=>{if(!monitor)throw new Error('料金通知は未接続です。設定と認証を確認してください。');return monitor.poll();});

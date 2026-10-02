@@ -35,7 +35,7 @@ const resumable=new Set(['queued','paused','cancelled','error']);
 const phases=new Set(['queued','running','paused','cancelled','error','complete','auth','metadata','transcribing','tags','saving','idle']);
 const idPattern=/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 class Queue {
-  constructor(store,{onState=()=>{},engineFactory=(s,o)=>new Engine(s,o),pool=new WorkPool(),maxActive=2,maxPending=20}={}) {
+  constructor(store,{onState=()=>{},engineFactory=(s,o)=>new Engine(s,o),pool=new WorkPool(),maxActive=2,maxPending=100}={}) {
     if(!Number.isInteger(maxActive)||maxActive<1||!Number.isInteger(maxPending)||maxPending<0)throw new Error('キュー上限が不正です。');
     this.store=store;this.onState=onState;this.engineFactory=engineFactory;this.pool=pool;this.maxActive=maxActive;this.maxPending=maxPending;
     this.items=[];this.engines=new Map();this.active=new Map();this.serial=Promise.resolve();this.persistenceError=null;
@@ -43,11 +43,13 @@ class Queue {
   }
   get state(){
     const activeCount=this.active.size;const queued=this.items.filter(i=>i.phase==='queued').length;
-    const pendingCount=Math.max(0,queued-Math.max(0,this.maxActive-activeCount));
+    const effectiveMaxActive=Math.min(this.maxActive,this.pool.limit);
+    const free=Math.max(0,effectiveMaxActive-activeCount);
+    const pendingCount=Math.max(0,queued-free);
     const items=this.items.map(i=>this.getItem(i.id));
-    return {busy:activeCount>0||queued>0,items,activeCount,pendingCount,availableSlots:Math.max(0,this.maxActive-activeCount),availablePending:Math.max(0,this.maxPending-pendingCount),apiLimit:this.pool.limit,maxActive:this.maxActive,maxPending:this.maxPending,message:this.persistenceError|| (activeCount?`${activeCount}件を処理中です。`:queued?'処理を開始しています。':'動画を追加または再開してください。'),phase:this.persistenceError?'error':activeCount?'running':queued?'queued':'idle',progress:items.length?items.reduce((s,i)=>s+(i.progress||0),0)/items.length:0};
+    return {busy:activeCount>0||queued>0,items,activeCount,pendingCount,availableSlots:Math.max(0,free-queued),availablePending:Math.max(0,this.maxPending-pendingCount),apiLimit:this.pool.limit,maxActive:this.maxActive,effectiveMaxActive,maxPending:this.maxPending,message:this.persistenceError|| (activeCount?`${activeCount}件を処理中です。`:queued?'処理を開始しています。':'動画を追加または再開してください。'),phase:this.persistenceError?'error':activeCount?'running':queued?'queued':'idle',progress:items.length?items.reduce((s,i)=>s+(i.progress||0),0)/items.length:0};
   }
-  getItem(id){const item=this.items.find(i=>i.id===id);if(!item)return null;const {settings,resume,cancelRequested,...info}=item;return structuredClone({...info,needsSettings:!settings,canResume:!this.active.has(id)&&resumable.has(item.phase)&&item.phase!=='queued'});}
+  getItem(id){const item=this.items.find(i=>i.id===id);if(!item)return null;const {settings,resume,cancelRequested,...info}=item;return structuredClone({...info,active:this.active.has(id),needsSettings:!settings,canResume:!this.active.has(id)&&resumable.has(item.phase)&&item.phase!=='queued'});}
   _emit(){this.onState(this.state);}
   _serialize(fn){const next=this.serial.then(fn);this.serial=next.catch(()=>{});return next;}
   _prune(){const completed=this.items.filter(i=>i.phase==='complete');const discard=new Set(completed.slice(0,Math.max(0,completed.length-100)).map(i=>i.id));this.items=this.items.filter(i=>!discard.has(i.id));for(const id of discard)this.engines.delete(id);}
@@ -105,7 +107,7 @@ class Queue {
       const unfinished=new Set(this.items.filter(i=>i.phase!=='complete').map(i=>i.url));
       if(new Set(normalized).size!==normalized.length||normalized.some(u=>unfinished.has(u)))throw new Error('未完了の同じ動画URLが含まれています。');
       const queued=this.items.filter(i=>i.phase==='queued').length;
-      if(queued+normalized.length>this.maxPending+Math.max(0,this.maxActive-this.active.size))throw new Error('待機キューの上限を超えています。');
+      if(queued+normalized.length>this.maxPending+Math.max(0,Math.min(this.maxActive,this.pool.limit)-this.active.size))throw new Error('待機場の上限を超えています。');
       const added=normalized.map(url=>({id:crypto.randomUUID(),url,settings:structuredClone(snapshot),phase:'queued',message:'処理を待っています。',progress:0,metadata:null,outputPath:null,estimatedUsd:0,createdAt:new Date().toISOString()}));
       const previous=this.items;this.items=[...previous,...added];try{await this._save();}catch(error){this.items=previous;throw error;}
       this._emit();return added.map(i=>this.getItem(i.id));
@@ -120,7 +122,7 @@ class Queue {
       const snapshot=item.settings||validateSettings(settingsOverride||{});
       if(item.phase==='queued')throw new Error('この動画はすでに待機中です。');
       const queued=this.items.filter(i=>i.phase==='queued').length;
-      if(queued>=this.maxPending+Math.max(0,this.maxActive-this.active.size))throw new Error('待機キューの上限を超えています。');
+      if(queued>=this.maxPending+Math.max(0,Math.min(this.maxActive,this.pool.limit)-this.active.size))throw new Error('待機場の上限を超えています。');
       const previous={...item};item.settings=snapshot;item.phase='queued';item.resume=true;item.message='再開を待っています。';
       try{await this._save();}catch(error){Object.assign(item,previous);throw error;}this._emit();
     });this._background(()=>this._pump());return this.getItem(id);
@@ -136,9 +138,22 @@ class Queue {
       await this._save();this._emit();return this.state;
     });
   }
+  async moveQueued(id,direction){return this._serialize(async()=>{
+    if(this.persistenceError)throw new Error(this.persistenceError);
+    if(![-1,1].includes(direction))throw new Error('待機順の移動方向が不正です。');
+    const waiting=this.items.filter(item=>item.phase==='queued'&&!this.active.has(item.id));
+    const index=waiting.findIndex(item=>item.id===id);
+    if(index<0)throw new Error('順番待ちの動画だけ移動できます。');
+    const target=waiting[index+direction];if(!target)return this.state;
+    const previous=this.items;this.items=[...previous];
+    const from=this.items.indexOf(waiting[index]),to=this.items.indexOf(target);
+    [this.items[from],this.items[to]]=[this.items[to],this.items[from]];
+    try{await this._save();}catch(error){this.items=previous;throw error;}
+    this._emit();return this.state;
+  });}
   async _pump(){
     if(this.persistenceError)return;
-    while(this.active.size<this.maxActive){
+    while(this.active.size<Math.min(this.maxActive,this.pool.limit)){
       const item=this.items.find(i=>i.phase==='queued');if(!item)break;
       const saved=await new Store(path.join(this.store.root,'jobs',item.id)).read('job',null);
       item.phase='running';item.message='処理を開始しています。';const engine=this._engine(item);this.active.set(item.id,engine);

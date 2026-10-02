@@ -49,8 +49,12 @@ function validateTranscript(data,{requireSpeakers=false}={}) {
   if (data?.audio_accessible !== true) throw new Error('動画の音声を取得できませんでした。公開状態を確認してください。');
   if (data.complete !== true || !Array.isArray(data.paragraphs) || !data.paragraphs.length) throw new Error('最後までの文字起こしが返りませんでした。再開してください。');
   if (data.paragraphs.length > 1000) throw new Error('応答の段落数が不正です。');
+  const body=data.paragraphs.map(item=>typeof item?.text==='string'?item.text:'').join('\n');
+  const names=new Map();
+  const normalizeEvidence=text=>text.normalize('NFKC').replace(/\s/g,'');
   let characters=0;
-  return data.paragraphs.map(item => {
+  const paragraphs=data.paragraphs.map(item => {
+    if(!item||typeof item!=='object')throw new Error('本文の段落形式が不正です。');
     if (typeof item.text !== 'string' || !item.text.trim()) throw new Error('本文が空の段落が返りました。');
     characters += item.text.length;
     if (characters > 300000) throw new Error('本文が処理上限を超えました。');
@@ -58,7 +62,18 @@ function validateTranscript(data,{requireSpeakers=false}={}) {
     if (heading.length > 60 || (heading && ![2,3].includes(item.level))) throw new Error('見出しの形式が不正です。');
     const speaker=item.speaker;
     if ((requireSpeakers||speaker!==undefined) && (typeof speaker!=='string'||!/^話者(?:[1-9][0-9]?|不明)$/.test(speaker))) throw new Error('話者を区別する応答形式が不正です。再開してください。');
+    const name=typeof item.speakerName==='string'?item.speakerName.trim():'';
+    const evidence=typeof item.speakerNameEvidence==='string'?item.speakerNameEvidence.trim():'';
+    if(speaker&&speaker!=='話者不明'&&name&&name.length<=60&&!/[\x00-\x1f\x7f]/.test(name)&&evidence&&evidence.length<=500&&normalizeEvidence(evidence).includes(normalizeEvidence(name))&&normalizeEvidence(body).includes(normalizeEvidence(evidence))){
+      if(!names.has(speaker))names.set(speaker,new Map());
+      names.get(speaker).set(name,evidence);
+    }
     return {text:item.text.trim(),heading,level:heading ? item.level : 2,...(speaker===undefined?{}:{speaker})};
+  });
+  return paragraphs.map(paragraph=>{
+    const candidates=names.get(paragraph.speaker);
+    if(candidates?.size===1){const [speakerName,speakerNameEvidence]=[...candidates][0];return {...paragraph,speakerName,speakerNameEvidence};}
+    return paragraph;
   });
 }
 function validateTags(tags) {
@@ -79,9 +94,11 @@ function renderMarkdown(metadata,startedAt,tags,paragraphs) {
   for (const paragraph of paragraphs) {
     if(paragraph.heading) lines.push(`${'#'.repeat(paragraph.level)} ${paragraph.heading}`,'');
     if(labelled){
-      const speaker=paragraph.speaker||'話者不明';
-      const scope=scoped&&paragraph.speakerScope?`（区間${paragraph.speakerScope}）`:'';
-      lines.push(`**${speaker}${scope}：** ${paragraph.text}`,'');
+      let speaker=paragraph.speakerName||paragraph.speaker||'話者不明';
+      if(paragraph.speakerName&&paragraphs.some(other=>other.speakerName===paragraph.speakerName&&other.speakerScope===paragraph.speakerScope&&other.speaker!==paragraph.speaker))speaker+=`（${paragraph.speaker}）`;
+      const scope=!paragraph.speakerName&&scoped&&paragraph.speakerScope?`（区間${paragraph.speakerScope}）`:'';
+      const safeSpeaker=speaker.replace(/[\\`*_{}\[\]()<>#!|~]/g,'\\$&');
+      lines.push(`**${safeSpeaker}${scope}：** ${paragraph.text}`,'');
     }else lines.push(paragraph.text,'');
   }
   return lines.join('\n');

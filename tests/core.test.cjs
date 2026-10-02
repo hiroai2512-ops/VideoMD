@@ -26,3 +26,15 @@ test('動画音声のリクエストに話者交代と必須speakerを含める'
  let request;const vertex=new Vertex({projectId:'test-project',model:c.MODELS[0]},async()=>'test-token',{fetchImpl:async(_url,options)=>{request=JSON.parse(options.body);return {ok:true,json:async()=>({candidates:[{finishReason:'STOP',content:{parts:[{text:JSON.stringify({audio_accessible:true,complete:true,paragraphs:[{speaker:'話者1',text:'本文'}]})}]}}]})};}});
  await vertex.transcribe({url:'https://www.youtube.com/watch?v=v64FpYCT6BA'},c.makeIntervals(1200)[0]);const prompt=request.contents[0].parts.at(-1).text;assert.match(prompt,/話者が交代するたび/);assert.match(prompt,/各段落のspeakerは必須/);assert.match(prompt,/区別不能なら話者不明/);
 });
+test('本文中の根拠付き話者名を同区間で統一し、根拠欠落・矛盾なら番号に戻す',()=>{
+ const result=c.validateTranscript({audio_accessible:true,complete:true,paragraphs:[{speaker:'話者1',text:'こんにちは、山田です。',speakerName:'山田',speakerNameEvidence:'山田です。'},{speaker:'話者2',text:'質問です。',speakerName:'田中',speakerNameEvidence:'田中です。'},{speaker:'話者1',text:'回答します。'}]},{requireSpeakers:true});
+ assert.equal(result[0].speakerName,'山田');assert.equal(result[2].speakerName,'山田');assert.equal(result[1].speakerName,undefined);
+ const md=c.renderMarkdown({title:'対談',url:'url',channel:'投稿者',publishedAt:'2026-10-03'},'2026-10-03',['一','二','三','四','五'],result);
+ assert.match(md,/\*\*山田：\*\* 回答します。/);assert.match(md,/\*\*話者2：\*\* 質問です。/);
+ const conflict=c.validateTranscript({audio_accessible:true,complete:true,paragraphs:[{speaker:'話者1',text:'山田です。',speakerName:'山田',speakerNameEvidence:'山田です。'},{speaker:'話者1',text:'田中です。',speakerName:'田中',speakerNameEvidence:'田中です。'}]},{requireSpeakers:true});assert.ok(conflict.every(p=>!p.speakerName));
+ const unknown=c.validateTranscript({audio_accessible:true,complete:true,paragraphs:[{speaker:'話者不明',text:'山田です。',speakerName:'山田',speakerNameEvidence:'山田です。'}]});assert.equal(unknown[0].speakerName,undefined);
+});
+test('同名の複数話者は番号も添え、名前のMarkdown記号をエスケープ',()=>{
+ const md=c.renderMarkdown({title:'対談',url:'url',channel:'投稿者',publishedAt:'2026-10-03'},'2026-10-03',['一','二','三','四','五'],[{speaker:'話者1',speakerName:'山田',speakerScope:1,text:'こんにちは。'},{speaker:'話者2',speakerName:'山田',speakerScope:1,text:'こんばんは。'},{speaker:'話者3',speakerName:'[名](https://example.test)',speakerScope:1,text:'本文'}]);
+ assert.match(md,/山田（話者1）/);assert.match(md,/山田（話者2）/);assert.ok(md.includes('\\[名\\]\\(https://example.test\\)'));
+});

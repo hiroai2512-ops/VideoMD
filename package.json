@@ -1,0 +1,15 @@
+{
+  "name": "videomd",
+  "version": "0.1.0",
+  "description": "YouTube動画を学習用Markdownへ保存するWindowsアプリ",
+  "private": true,
+  "main": "src/main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test tests/*.test.cjs",
+    "check": "node scripts/check.cjs",
+    "package": "electron-packager . VideoMD --platform=win32 --arch=x64 --out=release --overwrite --ignore=\"^/(runtime|exports|transcripts|logs|tests|docs|scripts|\\.git|\\.codex|\\.agents)(/|$)\""
+  },
+  "dependencies": { "google-auth-library": "11.1.0" },
+  "devDependencies": { "electron": "44.5.1", "@electron/packager": "20.3.0" }
+}

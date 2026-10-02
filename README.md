@@ -1,36 +1,54 @@
 # VideoMD
 
-WindowsでYouTube動画を日本語のMarkdownに保存する、個人の学習・ナレッジ収集用アプリです。
+YouTube動画の音声を読みやすい日本語へ整え、学習用Markdownとして保存するWindowsアプリです。Google Cloud経由でGemini 3.8 Flash／3.5 Flash-Liteを選択できます。
 
-## 予定する機能
+## このPCでの起動
 
-- 日本語中心・外国語混在・字幕なしの動画を対象に、通常20分、最長2時間を処理
-- Vertex経由のGemini 3.8 Flash／Gemini 3.5 Flash-Liteによる文字起こし、整文、日本語訳
-- `YYYY-MM-DD-動画タイトル.md`でローカル保存（日付は文字起こし実行日）
-- フロントマターに元タイトル、URL、公開日時、チャンネル、処理日時、関連タグ5～10個
-- 必要な場所だけ簡潔なH2／H3見出しを追加
-- API利用料金の1,000円ごとの到達通知（利用停止上限なし）
+`release/VideoMD-win32-x64/VideoMD.exe` または `VideoMD.cmd` をダブルクリックします。exeだけを移動せず実行フォルダごと保持してください。通常起動でスタートメニューにVideoMDを登録します。
 
-## 開発状況
+1. 画面中央の「YouTube動画のURL」に動画のURLを貼り付けます。
+2. 「文字起こしモデル」を選びます。既定はGemini 3.8 Flashです。
+3. 「文字起こしを開始」を押します。処理状況と動画情報が表示されます。
+4. 「Markdownを保存しました」と表示されたら「Markdownを開く」を押します。
 
-要件・設計と接続準備の段階です。アプリ本体と実際の起動コマンドはまだありません。Google Cloudは指定アカウントを照合して設定します。認証情報・処理した動画・出力・料金履歴は公開リポジトリに含めません。
+保存先の変更は「接続・保存の設定」→「フォルダを選択」→「設定を保存」です。このPCの指定済みアカウント・プロジェクト・認証・通知設定はローカルに保存しています。公開リポジトリや実行ファイルには含めません。APIの従量料金が発生します。[設計と料金比較](docs/architecture.md)を参照してください。
 
-- [要件](docs/requirements.md)
-- [設計と料金比較](docs/architecture.md)
-- [画面](docs/design/ui.md)
-- [データと出力](docs/design/data.md)
-- [実装計画と進捗](docs/Plan.md)
+出力は `YYYY-MM-DD-動画タイトル.md`。日付は日本時間の処理開始日です。同名時は連番にして既存ファイルを保持します。フロントマターにタイトル・URL・投稿日時・チャンネル・処理日時・タグ5～10個を付けます。必要な話題だけH2/H3を作り、本文にはタイムスタンプを付けません。
 
-## 現在実行できる検証
+## 認証と再開
 
-Python 3.11以降で、開発ルール・設定・文書参照の静的検証を行います。アプリ動作の検証ではありません。
+Google公式のローカルADC認証を使用します。[公式認証手順](https://docs.cloud.google.com/docs/authentication/set-up-adc-local-dev-environment)を2026-10-02確認。期待するメールと認証アカウント、ADCのquota projectと設定プロジェクトが一致する場合だけ処理します。APIキーの作成は不要です。
+
+認証が見つからない場合は「接続・保存の設定」の「ファイルを選択」で既存の `application_default_credentials.json` を指定します。「Google接続を確認」を押し、接続確認済みのメールが使用したいアカウントと一致することを確認します。認証ファイルをGit、チャット、共有フォルダへコピーしないでください。
+
+失敗・キャンセル時は完了区間を保持します。前回と同じURL・モデル・設定で「完了済み区間から再開」を押してください。再起動してもURLと再開状態を復元します。API送信済みの処理はキャンセルしても課金される場合があります。
+
+## 1,000円ごとの料金通知
+
+Cloud Billingの予算→Pub/Sub→VideoMDで受信します。[通知設計](docs/design/billing.md)を参照してください。専用プロジェクトのVertex利用料金を月次・JPY・クレジット適用前で集計し、1,000円、2,000円…の到達を通知します。通知用予算は停止上限ではありません。費用反映には遅延があり、最終請求額・税とは異なります。処理概算はUSDで別に表示します。
+
+通知接続中または処理中に画面を閉じるとトレイで継続します。「完全終了」で停止します。終了中・PC停止中には通知できず、次回起動時に未受信分を取得します。Windowsの通知設定によりOS通知が表示されない場合は、アプリ内履歴を確認してください。
+
+既知の制約: 初回のPub/Sub受信が空だと、最初の費用通知まで画面に「未接続」が残る場合があります。クラウド接続と実pullは検証済みですが、実料金通知はGoogleの配信待ちです。
+
+## 検証状況
+
+17分38秒の指定日本語動画で、アプリと同じ認証→情報取得→文字起こし→タグ生成→Markdown保存を実行済み。Windows実行ファイルの起動・画面読込・IPCを確認済みです。字幕を文字起こしに使わず、動画音声をGeminiへ渡します。
+
+2時間を20分区間に分ける構成を実装しましたが、実際の2時間動画の全境界照合・外国語混在精度・字幕なしYouTubeの実受け入れは残っています。全要件完了とは扱いません。[計画](docs/Plan.md)と[運用・復旧](docs/operations.md)を参照してください。
+
+## 開発
+
+Node.js 24以降。
 
 ```powershell
-python scripts/validate-agent-setup.py
+npm ci
+npm start
+npm test
+npm run check
+npm run package
 ```
 
-動画APIの診断には `scripts/probe-video.ps1` を使えます。Google Cloud CLIのローカルADC認証が必要で、実行にはAPIの従量料金がかかります。`ProjectId`、`ExpectedAccount`、正規化した `VideoUrl`、Git対象外の `runtime/` 内に置く `OutputPath` を指定します。指定アカウントと認証情報が一致しない場合は中止します。秘密値を引数に渡す必要はありません。
+`npm run package` はWindows x64版を `release/` に生成します。実行バイナリ・設定・認証・動画・出力・料金履歴はGit対象外です。レイアウトの開発用プレビューは `node scripts/preview.cjs` と `http://127.0.0.1:4317`。プレビューからAPIを実行しません。
 
-`Model` は指定2モデルから選択でき、`StartSecond`・`EndSecond` で区間、`FramesPerSecond` で映像のサンプリングを指定できます。既定値はFlash-Lite・全編・1 FPSです。これは開発用の接続診断で、アプリの起動コマンドや精度保証された文字起こし機能ではありません。応答の完了申告とは別に、動画長・音声・誤認識を確認します。
-
-開発ルールは[AGENTS.md](AGENTS.md)。Codex Coreから引き継いだ工程資料は[開発フロー](docs/development-workflow.md)、[モード運用](docs/work-modes.md)、[文書管理](docs/documentation.md)を参照してください。
+[要件](docs/requirements.md) / [設計](docs/architecture.md) / [画面](docs/design/ui.md) / [出力](docs/design/data.md) / [開発ルール](AGENTS.md)

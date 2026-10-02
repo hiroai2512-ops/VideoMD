@@ -29,4 +29,8 @@ Python 3.11以降で、開発ルール・設定・文書参照の静的検証を
 python scripts/validate-agent-setup.py
 ```
 
+動画APIの診断には `scripts/probe-video.ps1` を使えます。Google Cloud CLIのローカルADC認証が必要で、実行にはAPIの従量料金がかかります。`ProjectId`、`ExpectedAccount`、正規化した `VideoUrl`、Git対象外の `runtime/` 内に置く `OutputPath` を指定します。指定アカウントと認証情報が一致しない場合は中止します。秘密値を引数に渡す必要はありません。
+
+`Model` は指定2モデルから選択でき、`StartSecond`・`EndSecond` で区間、`FramesPerSecond` で映像のサンプリングを指定できます。既定値はFlash-Lite・全編・1 FPSです。これは開発用の接続診断で、アプリの起動コマンドや精度保証された文字起こし機能ではありません。応答の完了申告とは別に、動画長・音声・誤認識を確認します。
+
 開発ルールは[AGENTS.md](AGENTS.md)。Codex Coreから引き継いだ工程資料は[開発フロー](docs/development-workflow.md)、[モード運用](docs/work-modes.md)、[文書管理](docs/documentation.md)を参照してください。

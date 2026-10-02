@@ -27,7 +27,7 @@ Windows画面 → URL検証 → メタデータ取得 → Vertex AIで文字起�
 
 ## 設定準備の調査結果
 
-2026-10-02確認: Codexの`VideoMD`ローカルプロジェクトのパスは現在の作業フォルダと一致。Gitを初期化し、ユーザーによるGitHub CLI再認証が完了。許可された公開リポジトリを作成し、初回mainプッシュの一致を照合済み。Google Cloud CLIはコマンド検索で見つからなかった。最新のユーザー指定に従い、既存の専用VideoMDを使用する。アカウントとプロジェクトの一致を実画面で照合済み。短いテキストによる指定2モデルへの接続は実証済み。動画入力とアプリからの接続は未検証。個別の請求先設定・財務状況は公開文書に保存しない。接続先は設定時にユーザー指定と照合する。
+2026-10-02確認: Codexの`VideoMD`ローカルプロジェクトのパスは現在の作業フォルダと一致。Gitを初期化し、ユーザーによるGitHub CLI再認証が完了。許可された公開リポジトリを作成し、初回mainプッシュの一致を照合済み。Google Cloud CLIは当初未導入だったが、下記のとおり導入・認証済み。最新のユーザー指定に従い、既存の専用VideoMDを使用する。アカウントとプロジェクトの一致を実画面で照合済み。指定2モデルへのテキスト・短区間動画の接続は実証済み。アプリからの接続と文字起こしの全区間精度は未検証。個別の請求先設定・財務状況は公開文書に保存しない。接続先は設定時にユーザー指定と照合する。
 
 請求先はログイン中のアカウントではなく、プロジェクトが接続するCloud Billingアカウントで決まる（[公式接続仕様](https://docs.cloud.google.com/billing/docs/how-to/modify-project)、2026-10-02確認）。[増枠申請の公式説明](https://support.google.com/cloud/answer/6330231)では審査時に支払いを求める場合があるため、申請だけで無料の増枠が保証されるとは扱わない。既存プロジェクトの請求先解除はサービス停止につながるため、ユーザー指定なしに行わない。
 
@@ -41,7 +41,17 @@ Windows画面 → URL検証 → メタデータ取得 → Vertex AIで文字起�
 
 - [3.8 Flash](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-8-flash): ID `gemini-3.8-flash`、音声・動画入力。
 - [3.5 Flash-Lite](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/gemini/3-5-flash-lite): ID `gemini-3.5-flash-lite`、音声・動画入力。
-- [動画入力](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/capabilities/video-understanding): 公開動画またはアカウント所有のYouTube動画、1リクエストにYouTube URL1個。プレビューのPre-GA条件が適用される。ユーザー環境での利用と精度は未検証。
+- [動画入力](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/capabilities/video-understanding): 公開動画またはアカウント所有のYouTube動画、1リクエストにYouTube URL1個。プレビューのPre-GA条件が適用される。公式Cloud Storageサンプルの動画入力は指定環境で成功。YouTubeの全文処理と精度は未検証。
+
+### 動画入力の実証とエラー対応
+
+2026-10-02、ユーザー指定の公開YouTube動画（17分38秒）のタイトル・チャンネル・投稿日時・長さをYouTube画面とDOMメタデータで確認。比較用の自動字幕をローカルに取得したが、字幕には誤変換があり、音声認識の正解データとは扱わない。字幕がある動画だけで字幕なし対応を合格にしない。
+
+YouTube URL入力は初回に指定2モデルともHTTP 500となった。公式Cloud Storageサンプルではサービスエージェント準備中を示すHTTP 400が返り、準備後の同じサンプルはFlash-Liteで正常応答（`STOP`、音声・動画の入力使用量あり）。手動のIAM権限追加は行っていない。準備後のYouTube全文処理でFlash-LiteはHTTP 429、3.8 Flashは正常応答となった。ただし3.8 Flashの末尾時刻は実際の動画長と不一致で、見出しも過剰だった。これらをログイン失敗や動画の非公開と断定しない。
+
+両モデルで0～60秒・0.1 FPS、Flash-Liteで900～1058秒の区間指定は正常応答。冒頭の比較ではFlash-Liteに「中小企業」→「飲食店」の誤認識があり、今回のサンプルでは3.8 Flashの方が当該発話を保持した。これだけでモデル全般の優劣を断定しない。3.8 Flashの全文応答から時刻を除き、必要な見出しだけに整理したローカルMarkdown試作を保存したが、音声との全区間照合・翻訳・字幕なし対応は未完了。
+
+[429の公式対処](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/deploy/error-code-429)を同日に確認。globalを使用し、上限付き指数バックオフ、短区間化、並列処理を抑えた順次実行を検討する。予約容量の購入・増枠を自動で実行しない。診断用の `scripts/probe-video.ps1` は指定アカウントを照合し、開始・終了秒とFPSを指定可能。応答の `complete` はモデルの自己申告であり、終了理由・時間範囲・実音声との比較を別途必要とする。診断結果は公開対象外の `runtime/` に保存する。
 
 ## 費用比較
 

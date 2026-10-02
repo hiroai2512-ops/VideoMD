@@ -27,7 +27,9 @@ Windows画面 → URL検証 → メタデータ取得 → Vertex AIで文字起�
 
 ## 設定準備の調査結果
 
-2026-10-02確認: Codexの`VideoMD`ローカルプロジェクトのパスは現在の作業フォルダと一致。Gitを初期化し、ユーザーによるGitHub CLI再認証が完了。許可された公開リポジトリを作成。Google Cloud CLIはコマンド検索で見つからなかった。Google Cloudは作成先アカウントの訂正を受け、ヒロ側を確認してから準備し直す。誤った作成先のプロジェクトをアプリの接続先にしない。
+2026-10-02確認: Codexの`VideoMD`ローカルプロジェクトのパスは現在の作業フォルダと一致。Gitを初期化し、ユーザーによるGitHub CLI再認証が完了。許可された公開リポジトリを作成し、初回mainプッシュの一致を照合済み。Google Cloud CLIはコマンド検索で見つからなかった。ヒロ側アカウントを実画面で確認して新しい専用VideoMDを作成済み。外部接続準備は未完了であり、API実証は未実施。個別の請求先設定・財務状況は公開文書に保存しない。誤った作成先のプロジェクトをアプリの接続先にしない。
+
+請求先はログイン中のアカウントではなく、プロジェクトが接続するCloud Billingアカウントで決まる（[公式接続仕様](https://docs.cloud.google.com/billing/docs/how-to/modify-project)、2026-10-02確認）。[増枠申請の公式説明](https://support.google.com/cloud/answer/6330231)では審査時に支払いを求める場合があるため、申請だけで無料の増枠が保証されるとは扱わない。既存プロジェクトの請求先解除はサービス停止につながるため、ユーザー指定なしに行わない。
 
 - [ローカルADCの公式手順](https://docs.cloud.google.com/docs/authentication/set-up-adc-local-dev-environment)を確認。ログイン情報や認証JSONをチャットへ貼らせず、リポジトリに保存しない。
 - [Google Cloud予算](https://docs.cloud.google.com/billing/docs/how-to/budgets)では通知用予算だけで支出は停止しない。停止上限機能は対象サービスへの適用を別途確認し、アプリ側の概算上限と区別する。

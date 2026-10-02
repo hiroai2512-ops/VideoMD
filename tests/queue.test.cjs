@@ -3,6 +3,18 @@ const test=require('node:test');const assert=require('node:assert/strict');const
 const {Queue,WorkPool}=require('../src/queue.cjs');const {Store}=require('../src/store.cjs');
 const url=n=>`https://youtu.be/${String(n).padStart(11,'a')}`;
 const tick=()=>new Promise(resolve=>setImmediate(resolve));
+test('再開は同一プロジェクトとアカウントの認証パスだけ更新する',async t=>{
+  for(const mismatch of [null,'projectId','expectedAccount']) {
+    const f=await fixture(t);const [item]=await f.queue.enqueue([url(1)],f.settings);
+    await until(()=>f.starts.length===1);await f.queue.cancel();await until(()=>!f.queue.state.busy);await f.queue.serial;
+    const saved=(await f.store.read('queue')).items[0].settings;
+    const current={...f.settings,adcFile:path.join(f.root,'dedicated.json'),model:'gemini-3.5-flash-lite',outputDirectory:path.join(f.root,'new-output')};
+    if(mismatch)current[mismatch]=mismatch==='projectId'?'other-project':'other@example.test';
+    await f.queue.resume(item.id,current);await until(()=>f.starts.length===2);
+    assert.deepEqual(f.starts[1].input.settings,{...saved,adcFile:mismatch?saved.adcFile:current.adcFile});
+    await f.queue.cancel();await until(()=>!f.queue.state.busy);await f.queue.serial;
+  }
+});
 async function until(predicate){for(let i=0;i<200;i++){if(predicate())return;await new Promise(r=>setTimeout(r,5));}throw new Error('状態待機がタイムアウトしました。');}
 async function fixture(t,options={}){
   const root=await fs.mkdtemp(path.join(os.tmpdir(),'videomd-queue-'));t.after(()=>fs.rm(root,{recursive:true,force:true}));

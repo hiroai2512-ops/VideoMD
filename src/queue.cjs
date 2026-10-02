@@ -119,7 +119,13 @@ class Queue {
       if(this.persistenceError)throw new Error(this.persistenceError);
       const item=this.items.find(i=>i.id===id);
       if(!item||!resumable.has(item.phase)||this.active.has(id))throw new Error('この動画は再開できません。');
-      const snapshot=item.settings||validateSettings(settingsOverride||{});
+      let snapshot=item.settings||validateSettings(settingsOverride||{});
+      // Repair credentials without changing a saved job's project, billing or model.
+      if(item.settings && settingsOverride) {
+        const current=validateSettings(settingsOverride);
+        if(current.projectId===snapshot.projectId && current.expectedAccount===snapshot.expectedAccount)
+          snapshot={...snapshot,adcFile:current.adcFile};
+      }
       if(item.phase==='queued')throw new Error('この動画はすでに待機中です。');
       const queued=this.items.filter(i=>i.phase==='queued').length;
       if(queued>=this.maxPending+Math.max(0,Math.min(this.maxActive,this.pool.limit)-this.active.size))throw new Error('待機場の上限を超えています。');

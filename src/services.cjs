@@ -7,6 +7,8 @@ const {normalizeUrl}=require('./core.cjs');
 
 function findAdc(explicit) {
   if(explicit) {if(!fs.existsSync(explicit))throw new Error('指定した認証ファイルがありません。設定から選び直してください。'); return explicit;}
+  const dedicated=path.join(process.env.APPDATA||'', 'VideoMD','gcloud','application_default_credentials.json');
+  if(process.env.APPDATA && fs.existsSync(dedicated))return dedicated;
   if(process.env.GOOGLE_APPLICATION_CREDENTIALS)return process.env.GOOGLE_APPLICATION_CREDENTIALS;
   const standard=path.join(process.env.APPDATA||'', 'gcloud','application_default_credentials.json');
   if(fs.existsSync(standard))return standard;

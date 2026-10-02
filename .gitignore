@@ -1,0 +1,36 @@
+# Dependencies and build outputs
+node_modules/
+dist/
+release/
+coverage/
+bin/
+obj/
+__pycache__/
+*.pyc
+
+# Secrets and machine-specific configuration
+.env
+.env.*
+!.env.example
+*credentials*.json
+*service-account*.json
+*.pem
+*.key
+settings.local.json
+
+# User content and runtime state
+transcripts/
+exports/
+runtime/
+logs/
+*.log
+*.sqlite*
+*.mp3
+*.mp4
+*.wav
+*.m4a
+
+# Editor state
+.vs/
+.idea/
+Thumbs.db

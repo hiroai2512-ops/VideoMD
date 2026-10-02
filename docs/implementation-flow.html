@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Codex Core｜要件から本番デプロイまで</title>
+  <style>
+    :root { color-scheme: light; --ink:#17212b; --muted:#526170; --line:#d8e0e7; --blue:#1763a6; --pale:#eef6fc; --green:#176b52; --green-pale:#edf8f3; --amber:#8c5a0a; --amber-pale:#fff8e9; }
+    * { box-sizing:border-box; }
+    html { scroll-behavior:smooth; }
+    body { margin:0; background:#fff; color:var(--ink); font-family:system-ui,-apple-system,"Segoe UI",sans-serif; line-height:1.65; }
+    a { color:var(--blue); text-underline-offset:3px; }
+    .wrap { width:min(1120px,calc(100% - 40px)); margin:auto; }
+    header { border-bottom:1px solid var(--line); padding:46px 0 32px; }
+    .eyebrow { color:var(--blue); font-size:.8rem; font-weight:800; letter-spacing:.09em; text-transform:uppercase; margin:0 0 8px; }
+    h1 { font-size:clamp(2rem,5vw,3.25rem); line-height:1.25; letter-spacing:-.035em; margin:0 0 14px; }
+    h2 { font-size:clamp(1.5rem,3vw,2rem); line-height:1.35; margin:0 0 12px; letter-spacing:-.02em; }
+    h3 { font-size:1.08rem; margin:0 0 6px; }
+    p { margin:0 0 12px; }
+    .lead { max-width:800px; color:var(--muted); font-size:1.05rem; }
+    nav { display:flex; flex-wrap:wrap; gap:8px; margin-top:22px; }
+    nav a { border:1px solid var(--line); border-radius:999px; padding:5px 13px; text-decoration:none; font-size:.88rem; }
+    main section { padding:42px 0; border-bottom:1px solid var(--line); }
+    .section-lead { color:var(--muted); max-width:850px; margin-bottom:22px; }
+    .note { border-left:4px solid var(--blue); background:var(--pale); padding:15px 18px; border-radius:0 8px 8px 0; }
+    .note strong { color:#124b7a; }
+    .flow { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; margin:24px 0 18px; }
+    .step { position:relative; border:1px solid var(--line); border-radius:12px; padding:18px; min-height:174px; background:#fff; }
+    .step::after { content:"→"; position:absolute; right:-13px; top:50%; transform:translateY(-50%); color:var(--blue); background:#fff; font-size:21px; z-index:1; }
+    .step:nth-child(4n)::after, .step:last-child::after { display:none; }
+    .num { display:inline-flex; align-items:center; justify-content:center; width:29px; height:29px; border-radius:50%; background:var(--pale); color:var(--blue); font-weight:800; font-size:.87rem; margin-bottom:10px; }
+    .step p { font-size:.9rem; color:var(--muted); margin:0; }
+    .step small { display:block; margin-top:10px; color:var(--green); font-weight:700; }
+    .gate { border:1px solid #e7d3a7; background:var(--amber-pale); border-radius:12px; padding:17px 19px; margin-top:20px; }
+    .gate strong { color:var(--amber); }
+    .gate p { margin:4px 0 0; }
+    .columns { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+    .card { border:1px solid var(--line); border-radius:12px; padding:20px; background:#fff; }
+    .card p:last-child, .card ul:last-child { margin-bottom:0; }
+    ul, ol { margin:8px 0 0; padding-left:1.25em; }
+    li { margin:4px 0; }
+    .agent-map { display:grid; grid-template-columns: minmax(0,1fr) 54px minmax(0,1.35fr); gap:10px; align-items:center; margin:22px 0; }
+    .hub { border:2px solid var(--blue); background:var(--pale); border-radius:14px; padding:22px; text-align:center; }
+    .hub strong { display:block; font-size:1.15rem; }
+    .hub span { font-size:.88rem; color:var(--muted); }
+    .arrows { text-align:center; color:var(--blue); font-size:1.6rem; line-height:1; }
+    .children { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; }
+    .child { border:1px solid var(--line); border-radius:9px; padding:11px 12px; font-size:.85rem; }
+    .child strong { display:block; color:var(--blue); font-size:.93rem; }
+    .child span { color:var(--muted); }
+    .map-caption { font-size:.9rem; color:var(--muted); }
+    .table-scroll { overflow-x:auto; }
+    table { width:100%; border-collapse:collapse; min-width:760px; }
+    th,td { border-bottom:1px solid var(--line); text-align:left; padding:12px 10px; vertical-align:top; }
+    th { background:#f6f8fa; font-size:.85rem; }
+    td { font-size:.9rem; }
+    code { background:#f3f5f7; border-radius:4px; padding:1px 4px; font-size:.92em; }
+    .role-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; margin-top:22px; }
+    .role-card { border:1px solid var(--line); border-radius:12px; padding:18px; }
+    .role-card.main { border-color:#8db9db; background:#f7fbfe; }
+    .role-head { display:flex; justify-content:space-between; gap:8px; align-items:baseline; margin-bottom:8px; }
+    .role-head h3 { margin:0; }
+    .role-head span { color:var(--muted); font-size:.82rem; white-space:nowrap; }
+    .mini-flow { display:flex; flex-wrap:wrap; align-items:center; gap:5px; margin:10px 0; }
+    .mini-flow b { border:1px solid var(--line); border-radius:6px; padding:4px 7px; font-size:.78rem; font-weight:600; background:#fff; }
+    .mini-flow i { font-style:normal; color:var(--blue); }
+    .role-card p { color:var(--muted); font-size:.88rem; margin:0; }
+    .cost { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; margin:20px 0; }
+    .cost .card { background:#fcfdfe; }
+    .cost strong { display:block; font-size:1.05rem; margin-bottom:5px; }
+    .cost p { font-size:.9rem; color:var(--muted); }
+    .sources { font-size:.9rem; color:var(--muted); }
+    .sources li { margin:7px 0; }
+    footer { padding:25px 0 45px; color:var(--muted); font-size:.82rem; }
+    @media(max-width:800px) { .flow { grid-template-columns:repeat(2,minmax(0,1fr)); } .step:nth-child(2n)::after { display:none; } .columns,.role-grid { grid-template-columns:1fr; } .agent-map { grid-template-columns:1fr; } .arrows { transform:rotate(90deg); padding:4px; } .cost { grid-template-columns:1fr; } }
+    @media(max-width:480px) { .wrap { width:min(100% - 26px,1120px); } header { padding-top:30px; } main section { padding:32px 0; } .flow,.children { grid-template-columns:1fr; } .step { min-height:0; } .step::after { display:none; } }
+    @media print { nav { display:none; } main section { break-inside:avoid; } a { color:inherit; } }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <p class="eyebrow">Codex Core / 開発の見取り図</p>
+      <h1>要件を受け取ってから<br>本番環境へ届けるまで</h1>
+      <p class="lead">メインエージェントが全体の判断と統合を担当します。必要なときだけ子エージェントに範囲を区切って依頼し、検証結果を受け取って次へ進みます。</p>
+      <nav aria-label="ページ内目次"><a href="#flow">開発フロー</a><a href="#agents">エージェントの関係</a><a href="#roles">役割とモデル</a><a href="#cost">推論コスト</a><a href="#sources">参照元</a></nav>
+    </div>
+  </header>
+  <main class="wrap">
+    <section id="flow" aria-labelledby="flow-title">
+      <p class="eyebrow">01 / End-to-end</p>
+      <h2 id="flow-title">実装から本番までの流れ</h2>
+      <p class="section-lead">前提として、ユーザーがアプリ用フォルダを作り、Codex Core の必要な内容をコピーして、そのフォルダで Codex を開始します。ここから下が、要望を受け取った後の流れです。</p>
+      <div class="flow" aria-label="要件受領から本番までの8段階">
+        <article class="step"><span class="num">1</span><h3>構想を壁打ち</h3><p>誰の何を解決するか、主要な利用場面、アプリ名を整理。専用 GitHub リポジトリを同じフォルダに接続。</p><small>準備と目的を確認</small></article>
+        <article class="step"><span class="num">2</span><h3>要件を定義</h3><p>MVP、対象外、制約、確認可能な受け入れ条件をユーザーと決める。</p><small>docs/requirements.md</small></article>
+        <article class="step"><span class="num">3</span><h3>画面・技術を設計</h3><p>画面遷移、データ、API、権限、障害時の動き、公開・復旧方針を決める。</p><small>architecture / design</small></article>
+        <article class="step"><span class="num">4</span><h3>実装計画を作る</h3><p>価値とリスクを早く確かめられる小さな Step に分け、検証方法を付ける。</p><small>docs/Plan.md</small></article>
+        <article class="step"><span class="num">5</span><h3>縦切りで実装</h3><p>最小の利用シナリオから画面・API・保存をつなぎ、機能を広げる。</p><small>コード＋関連テスト</small></article>
+        <article class="step"><span class="num">6</span><h3>テスト・レビュー</h3><p>型・Lint・テスト・ビルド等を差分に応じて実行。重要差分は独立レビュー。</p><small>P0/P1 は修正・再検証</small></article>
+        <article class="step"><span class="num">7</span><h3>ステージング確認</h3><p>本番に近い設定で主要導線を確認。環境、移行、バックアップ、復旧手順を確定。</p><small>公開前の品質ゲート</small></article>
+        <article class="step"><span class="num">8</span><h3>本番デプロイ</h3><p>承認された範囲で公開。ヘルスチェック、主要導線、指標を確認し、必要ならロールバック。</p><small>公開後の監視へ</small></article>
+      </div>
+      <div class="gate"><strong>本番公開の判断点</strong><p>公開対象・影響・復旧方法を示し、必要な承認を得てから実行します。課金、データ削除、外部通知も依頼と承認の範囲で扱います。</p></div>
+    </section>
+
+    <section aria-labelledby="quality-title">
+      <p class="eyebrow">02 / Quality gates</p>
+      <h2 id="quality-title">各段階で何を確認するか</h2>
+      <div class="columns">
+        <div class="card"><h3>作る前</h3><ul><li>目的、対象外、受け入れ条件が具体的か</li><li>GitHub リポジトリ、作業フォルダ、Codex プロジェクトが対応しているか</li><li>認証、データ、外部サービスの重要なリスクが整理されているか</li></ul></div>
+        <div class="card"><h3>公開する前</h3><ul><li>必要な静的解析・テスト・ビルドと受け入れ条件を満たしたか</li><li>未解決の P0/P1 がなく、ステージングで主要導線を確認したか</li><li>バックアップ、復元、監視、ロールバック条件が明確か</li></ul></div>
+      </div>
+      <p class="section-lead" style="margin-top:16px">レビュー後の追加修正は、根拠を確認した P0/P1 に限ります。P2/P3 は記録し、その修正のためのループは続けません。合意済みの受け入れ条件が未達なら完了扱いにしません。</p>
+    </section>
+
+    <section id="agents" aria-labelledby="agents-title">
+      <p class="eyebrow">03 / Agent orchestration</p>
+      <h2 id="agents-title">エージェントはどう連携するか</h2>
+      <p class="section-lead">基本はメイン1人で進めます。目的と担当範囲を明確にでき、メインにも並行して有用な仕事がある場合にだけ委譲します。</p>
+      <div class="agent-map" role="img" aria-label="メインが必要時に最大2人の子を起動し、結果を受け取って統合する図">
+        <div class="hub"><strong>メイン</strong><span>6.1 Sol / medium<br>要件・設計・判断・統合・公開</span></div>
+        <div class="arrows" aria-hidden="true">⇄</div>
+        <div class="children">
+          <div class="child"><strong>scout</strong><span>限定調査 → 根拠を返す</span></div>
+          <div class="child"><strong>lite_worker</strong><span>小さな実装 → テスト結果を返す</span></div>
+          <div class="child"><strong>implementer</strong><span>分担実装 → 変更と検証を返す</span></div>
+          <div class="child"><strong>reviewer / advisor</strong><span>点検・相談 → 指摘や推奨を返す</span></div>
+        </div>
+      </div>
+      <p class="map-caption">親が「目的・対象ファイル・受け入れ条件・検証方法」を渡す → 子が限定作業と結果を返す → 親が確認、統合、Plan 更新、次の判断をする。標準は子0〜1人、同時最大2人。子から孫へは委譲しません。</p>
+    </section>
+
+    <section id="roles" aria-labelledby="roles-title">
+      <p class="eyebrow">04 / Roles</p>
+      <h2 id="roles-title">役割・モデル・推論量</h2>
+      <p class="section-lead">次の値はこのリポジトリの設定です。実際に適用されるモデルは、使用するクライアントの選択と設定の読込状態で確認します。</p>
+      <div class="table-scroll"><table><thead><tr><th>役割</th><th>モデル</th><th>推論量</th><th>担当</th><th>起動の目安</th></tr></thead><tbody>
+        <tr><td><strong>メイン</strong></td><td><code>gpt-6.1-sol</code></td><td>medium</td><td>全体の進行、設計判断、通常実装、統合、本番準備</td><td>常に中心</td></tr>
+        <tr><td><strong>scout</strong></td><td><code>gpt-6-luna</code></td><td>low</td><td>コード・ログ・仕様から範囲を絞った事実抽出</td><td>読み取りだけで答えが出る調査</td></tr>
+        <tr><td><strong>lite_worker</strong></td><td><code>gpt-6-luna</code></td><td>high</td><td>仕様・テスト・既存パターンが確定した小さな実装</td><td>局所的で取り消せる仕事</td></tr>
+        <tr><td><strong>implementer</strong></td><td><code>gpt-6.1-sol</code></td><td>medium</td><td>独立して分担できる通常実装と関連テスト</td><td>メインと編集範囲を分けられるとき</td></tr>
+        <tr><td><strong>reviewer</strong></td><td><code>gpt-6.1-sol</code></td><td>high</td><td>重要差分の独立点検と優先度付き指摘</td><td>認可・データ整合性など重要な変更</td></tr>
+        <tr><td><strong>advisor</strong></td><td><code>gpt-6-astra</code></td><td>low</td><td>重大な設計選択や証拠のある難解な不具合の限定相談</td><td>厳しい昇格条件を満たすときだけ</td></tr>
+      </tbody></table></div>
+      <div class="role-grid" aria-label="役割ごとの作業フロー">
+        <article class="role-card main"><div class="role-head"><h3>メイン</h3><span>6.1 Sol / medium</span></div><div class="mini-flow"><b>要望を整理</b><i>→</i><b>設計・計画</b><i>→</i><b>実装・委譲</b><i>→</i><b>検証・統合</b><i>→</i><b>公開判断</b></div><p>要件と成果の責任者。子の報告を採用する前に確認し、Plan と品質ゲートを更新します。</p></article>
+        <article class="role-card"><div class="role-head"><h3>scout</h3><span>Luna / low</span></div><div class="mini-flow"><b>問いを受ける</b><i>→</i><b>範囲を検索</b><i>→</i><b>事実と根拠を返す</b></div><p>設計判断や編集はしません。答えが見つからない場合も範囲を広げず親へ返します。</p></article>
+        <article class="role-card"><div class="role-head"><h3>lite_worker</h3><span>Luna / high</span></div><div class="mini-flow"><b>確定仕様を受ける</b><i>→</i><b>局所実装</b><i>→</i><b>テスト</b><i>→</i><b>結果を返す</b></div><p>API契約、DBスキーマ、認証・認可、本番設定などを変える仕事は担当しません。</p></article>
+        <article class="role-card"><div class="role-head"><h3>implementer</h3><span>6.1 Sol / medium</span></div><div class="mini-flow"><b>担当範囲を受ける</b><i>→</i><b>通常実装</b><i>→</i><b>関連テスト</b><i>→</i><b>報告</b></div><p>機能単位の実装を分担。全体の契約や設計の採否はメインが決めます。</p></article>
+        <article class="role-card"><div class="role-head"><h3>reviewer</h3><span>6.1 Sol / high</span></div><div class="mini-flow"><b>要件・差分を受ける</b><i>→</i><b>独立点検</b><i>→</i><b>P0〜P3 を報告</b></div><p>重要差分だけを読み取りで確認。P0/P1 の修正後だけ、影響範囲を再点検します。</p></article>
+        <article class="role-card"><div class="role-head"><h3>advisor</h3><span>Astra / low</span></div><div class="mini-flow"><b>重大な問いを受ける</b><i>→</i><b>証拠・案を比較</b><i>→</i><b>推奨とリスクを返す</b></div><p>実装は行わず、相談後の実装と統合は 6.1 Sol に戻します。</p></article>
+      </div>
+    </section>
+
+    <section id="cost" aria-labelledby="cost-title">
+      <p class="eyebrow">05 / Usage</p>
+      <h2 id="cost-title">推論コストの考え方</h2>
+      <p class="section-lead">low / medium / high は推論量の設定です。Plus の消費量や金額の固定倍率ではありません。モデル、推論、ツール、会話の長さ、子エージェントの作業で実際の利用量が変わります。</p>
+      <div class="cost">
+        <div class="card"><strong>普段は 6.1 Sol / medium</strong><p>メインが一貫して進める。小さな変更は自分で完結し、委譲の起動・統合コストを増やしません。</p></div>
+        <div class="card"><strong>狭い仕事だけ委譲</strong><p>単純な事実抽出は Luna / low。仕様が固まった限定実装は Luna / high。一般実装は 6.1 Sol / medium。</p></div>
+        <div class="card"><strong>高い推論は必要時だけ</strong><p>重要差分のレビューは 6.1 Sol / high。重大判断・難解バグだけ Astra / low に限定相談します。</p></div>
+      </div>
+      <div class="note"><strong>評価する指標</strong>：短い回答や安いモデルの使用率ではなく、「受け入れ条件を満たした変更1件あたりの利用量・時間・手戻り」。子エージェントの作業も利用枠を消費します。API料金を Plus の残量へ換算しません。</div>
+    </section>
+
+    <section id="sources" aria-labelledby="sources-title">
+      <p class="eyebrow">06 / Source of truth</p>
+      <h2 id="sources-title">この図の参照元</h2>
+      <ul class="sources"><li><a href="../README.md">README.md</a>：ユーザーの手動準備と Codex 開始順序</li><li><a href="development-workflow.md">開発フロー</a>：要件からデプロイ・運用、レビューと公開条件</li><li><a href="efficient-development.md">効率運用</a>：委譲条件、役割選択、利用量の考え方</li><li><a href="../.codex/README.md">エージェント設定の説明</a>、<a href="../.codex/config.toml">メイン設定</a>、<a href="../.codex/agents/">各役割の TOML</a>：モデルと推論量</li></ul>
+    </section>
+  </main>
+  <footer class="wrap">Codex Core の現在の運用案を図示。アプリごとの技術・テスト・デプロイ手順は、そのアプリの要件と環境に合わせて決めます。</footer>
+</body>
+</html>

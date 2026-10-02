@@ -4,12 +4,15 @@ const fs=require('node:fs/promises');
 const {normalizeUrl,validateSettings,makeIntervals,validateTranscript,validateTags,renderMarkdown,safeFilename,saveUnique,estimateUsd}=require('./core.cjs');
 const {createAuth,getMetadata,Vertex}=require('./services.cjs');
 class Engine {
-  constructor(store,{onState=()=>{},authFactory=createAuth,metadataLoader=getMetadata,vertexFactory=(...args)=>new Vertex(...args)}={}) {
+  constructor(store,{onState=()=>{},authFactory=createAuth,metadataLoader=getMetadata,vertexFactory=(...args)=>new Vertex(...args),pool=null}={}) {
     this.store=store;this.onState=onState;this.authFactory=authFactory;this.metadataLoader=metadataLoader;this.vertexFactory=vertexFactory;this.controller=null;
+    this.pool=pool;this.persistence=Promise.resolve();
     this.state={phase:'idle',message:'YouTubeのURLを入力して開始してください。',busy:false,progress:0};
   }
   emit(update){Object.assign(this.state,update);this.onState({...this.state});}
   cancel(){this.controller?.abort();}
+  persist(fn){const next=this.persistence.then(fn);this.persistence=next.catch(()=>{});return next;}
+  request(fn,signal){return this.pool?this.pool.run(fn,signal):fn();}
   async restore() {
     const job=await this.store.read('job',null);
     if(!job)return;
@@ -38,26 +41,36 @@ class Engine {
       if(!metadata.durationSeconds)throw new Error('動画の長さを取得できませんでした。');
       job=previous || {id:crypto.randomUUID(),fingerprint,startedAt:new Date().toISOString(),metadata,intervals:makeIntervals(metadata.durationSeconds),chunks:[],usage:[],model:settings.model};
       await this.store.write('job',job);
-      const vertex=this.vertexFactory(settings,auth.getToken,{onUsage:async usage=>{
+      const vertex=this.vertexFactory(settings,auth.getToken,{onUsage:async usage=>this.persist(async()=>{
         const record={at:new Date().toISOString(),model:settings.model,usage,estimatedUsd:estimateUsd(settings.model,usage,new Date())};
         const ledger=await this.store.read('usage',[]);ledger.push(record);await this.store.write('usage',ledger);
         job.usage.push(record);await this.store.write('job',job);
         this.emit({estimatedUsd:job.usage.reduce((sum,r)=>sum+r.estimatedUsd,0)});
-      },onRetry:(attempt,status)=>this.emit({message:`Google APIの応答待ち（${status}）。再試行 ${attempt}/2…`})});
+      }),onRetry:(attempt,status)=>{if(status===429||status===503)this.pool?.reduce();this.emit({message:`Google APIの応答待ち（${status}）。再試行 ${attempt}/2…`});}});
       this.emit({metadata,total:job.intervals.length,estimatedUsd:job.usage.reduce((sum,r)=>sum+r.estimatedUsd,0)});
-      for(let index=0;index<job.intervals.length;index++) {
-        if(job.chunks[index])continue;
-        controller.signal.throwIfAborted();
-        this.emit({phase:'transcribing',message:`音声を文字起こししています… ${index+1}/${job.intervals.length} 区間`,progress:index/job.intervals.length});
-        const result=await vertex.transcribe(metadata,job.intervals[index],controller.signal);
-        job.chunks[index]=validateTranscript(result);
-        await this.store.write('job',job);
-      }
+      let cursor=0,failure;
+      const completed=()=>job.chunks.filter(Boolean).length;
+      const worker=async()=>{
+        while(!failure && cursor<job.intervals.length){
+          const index=cursor++;
+          if(job.chunks[index])continue;
+          try{
+            controller.signal.throwIfAborted();
+            this.emit({phase:'transcribing',message:`文字起こし中：完了 ${completed()}/${job.intervals.length} 区間`,progress:completed()/job.intervals.length});
+            const result=await this.request(()=>vertex.transcribe(metadata,job.intervals[index],controller.signal),controller.signal);
+            const paragraphs=validateTranscript(result);
+            await this.persist(async()=>{job.chunks[index]=paragraphs;await this.store.write('job',job);});
+            this.emit({progress:completed()/job.intervals.length,message:`文字起こし中：完了 ${completed()}/${job.intervals.length} 区間`});
+          }catch(error){failure??=error;}
+        }
+      };
+      await Promise.all(Array.from({length:this.pool?2:1},worker));
+      if(failure)throw failure;
       controller.signal.throwIfAborted();
       const paragraphs=job.chunks.flat();
       if(!job.tags) {
         this.emit({phase:'tags',message:'全文から関連タグを作っています…',progress:0.95});
-        job.tags=validateTags((await vertex.tags(paragraphs,controller.signal)).tags);await this.store.write('job',job);
+        job.tags=validateTags((await this.request(()=>vertex.tags(paragraphs,controller.signal),controller.signal)).tags);await this.store.write('job',job);
       }
       controller.signal.throwIfAborted();
       const markdown=renderMarkdown(metadata,job.startedAt,job.tags,paragraphs);

@@ -5,6 +5,7 @@ const fs=require('node:fs/promises');
 const {pathToFileURL}=require('node:url');
 const {Store}=require('./store.cjs');
 const {Engine}=require('./engine.cjs');
+const {Queue}=require('./queue.cjs');
 const {validateSettings,MODELS}=require('./core.cjs');
 const {createAuth}=require('./services.cjs');
 const {BillingMonitor}=require('./billing.cjs');
@@ -35,7 +36,7 @@ app.whenReady().then(async()=>{
   let bootstrap={};
   if(!app.isPackaged) {try{bootstrap=JSON.parse((await fs.readFile(path.join(__dirname,'..','runtime','bootstrap.json'),'utf8')).replace(/^\uFEFF/,''));}catch{}}
   try{settings=await store.read('settings',{...defaults(),...bootstrap});if(bootstrap.subscription){settings.subscription=bootstrap.subscription;settings.budgetId=bootstrap.budgetId;}if(Object.keys(bootstrap).length)await store.write('settings',settings);}catch{settings=defaults();}
-  engine=new Engine(store,{onState:value=>send('state',value)});
+  engine=new Queue(store,{engineFactory:(jobStore,options)=>new Engine(jobStore,options),onState:value=>send('state',value)});
   await engine.restore();
   session.defaultSession.setPermissionRequestHandler((_contents,_permission,callback)=>callback(false));
   window=new BrowserWindow({show:!process.argv.includes('--smoke-test'),width:1140,height:820,minWidth:760,minHeight:650,title:'VideoMD',backgroundColor:'#f5f4ef',webPreferences:{preload:path.join(__dirname,'preload.cjs'),nodeIntegration:false,contextIsolation:true,sandbox:true}});
@@ -47,14 +48,14 @@ app.whenReady().then(async()=>{
   tray=new Tray(icon);tray.setToolTip('VideoMD — 文字起こしと料金通知');
   tray.setContextMenu(Menu.buildFromTemplate([{label:'VideoMDを開く',click:()=>window.show()},{label:'完全終了',click:()=>{quitting=true;engine.cancel();app.quit();}}]));tray.on('double-click',()=>window.show());
   register('initial',async()=>({settings,state:engine.state,billing:await store.read('billing',{}),version:app.getVersion()}));
-  register('settings',async value=>{if(engine.state.busy)throw new Error('処理中は設定を変更できません。');settings=validateSettings(value);await store.write('settings',settings);await setupBilling();return settings;});
+  register('settings',async value=>{const validated=validateSettings(value);if(Object.keys(validated).every(key=>validated[key]===settings[key]))return settings;if(engine.state.busy)throw new Error('処理中は設定を変更できません。');settings=validated;await store.write('settings',settings);await setupBilling();return settings;});
   register('choose-folder',async()=>{const result=await dialog.showOpenDialog(window,{properties:['openDirectory','createDirectory']});return result.canceled?null:result.filePaths[0];});
   register('choose-adc',async()=>{const result=await dialog.showOpenDialog(window,{title:'既存のGoogle ADC認証ファイルを選択',filters:[{name:'JSON',extensions:['json']}],properties:['openFile']});return result.canceled?null:result.filePaths[0];});
   register('verify-auth',async()=>{const auth=await createAuth(validateSettings(settings));return {email:auth.email};});
-  register('start',async input=>engine.run({url:input.url,settings},{resume:input.resume===true}));
-  register('cancel',()=>engine.cancel());
-  register('open-output',async()=>{if(!engine.state.outputPath)throw new Error('保存済みファイルがありません。');return shell.openPath(engine.state.outputPath);});
-  register('open-folder',()=>{if(engine.state.outputPath)shell.showItemInFolder(engine.state.outputPath);});
+  register('start',async input=>input.resume===true?engine.resume(input.id,settings):engine.enqueue(input.urls||[input.url],settings));
+  register('cancel',id=>engine.cancel(id));
+  register('open-output',async id=>{const item=engine.getItem(id);if(!item?.outputPath)throw new Error('保存済みファイルがありません。');return shell.openPath(item.outputPath);});
+  register('open-folder',id=>{const item=engine.getItem(id);if(item?.outputPath)shell.showItemInFolder(item.outputPath);});
   register('poll-billing',async()=>{if(!monitor)throw new Error('料金通知は未接続です。設定と認証を確認してください。');return monitor.poll();});
   register('quit',()=>{quitting=true;engine.cancel();app.quit();});
   await window.loadFile(path.join(__dirname,'ui','index.html'));

@@ -15,3 +15,16 @@ test('VMD-R1: 再起動と再開時の認証失敗でもURLと再開導線を保
   await assert.rejects(engine.run({url:saved.metadata.url,settings:{projectId:'test-project',expectedAccount:'test@example.test',outputDirectory:os.tmpdir()}},{resume:true}),/temporary auth/);
   assert.equal(engine.state.canResume,true);assert.equal(engine.state.url,saved.metadata.url);
 });
+test('並列区間の逆順完了でも出力順と全使用量の保存を保つ',async()=>{
+  const root=await fs.mkdtemp(path.join(os.tmpdir(),'videomd-parallel-'));
+  const store=new Store(path.join(root,'state'));let active=0,peak=0;
+  const settings={projectId:'test-project',expectedAccount:'test@example.test',outputDirectory:path.join(root,'out')};
+  const engine=new Engine(store,{pool:{run:fn=>fn()},authFactory:async()=>({email:settings.expectedAccount,getToken:async()=>''}),metadataLoader:async url=>({url,title:'並列',channel:'投稿者',publishedAt:'2026-10-02T00:00:00Z',durationSeconds:2500}),vertexFactory:(_settings,_token,{onUsage})=>({transcribe:async(_meta,interval)=>{active++;peak=Math.max(peak,active);await new Promise(r=>setTimeout(r,interval.start===0?30:5));await onUsage({promptTokenCount:10,candidatesTokenCount:20});active--;return {audio_accessible:true,complete:true,paragraphs:[{text:`本文${interval.start}`,heading:'',level:2}]};},tags:async()=>({tags:['一','二','三','四','五']})})});
+  try{const output=await engine.run({url:'https://youtu.be/v64FpYCT6BA',settings});const md=await fs.readFile(output,'utf8');assert.equal(peak,2);assert.ok(md.indexOf('本文0')<md.indexOf('本文1200'));assert.ok(md.indexOf('本文1200')<md.indexOf('本文2400'));assert.equal((await store.read('usage',[])).length,3);assert.equal((await store.read('job',{})).usage.length,3);}finally{await fs.rm(root,{recursive:true,force:true});}
+});
+test('並列の一部失敗後も実行中の成功区間を保存し終了後に再送しない',async()=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'videomd-partial-'));const store=new Store(path.join(root,'state'));let fail=true;const calls=[];
+ const settings={projectId:'test-project',expectedAccount:'test@example.test',outputDirectory:path.join(root,'out')};
+ const engine=new Engine(store,{pool:{run:fn=>fn()},authFactory:async()=>({email:settings.expectedAccount,getToken:async()=>''}),metadataLoader:async url=>({url,title:'部分失敗',channel:'投稿者',publishedAt:'2026-10-02T00:00:00Z',durationSeconds:2500}),vertexFactory:()=>({transcribe:async(_meta,interval)=>{calls.push(interval.start);await new Promise(r=>setTimeout(r,interval.start===0?15:1));if(fail&&interval.start===1200)throw new Error('incomplete');return {audio_accessible:true,complete:true,paragraphs:[{text:`本文${interval.start}`,heading:'',level:2}]};},tags:async()=>({tags:['一','二','三','四','五']})})});
+ try{await assert.rejects(engine.run({url:'https://youtu.be/v64FpYCT6BA',settings}),/incomplete/);assert.ok((await store.read('job')).chunks[0]);assert.deepEqual(calls,[0,1200]);fail=false;await engine.run({url:'https://youtu.be/v64FpYCT6BA',settings},{resume:true});assert.deepEqual(calls,[0,1200,1200,2400]);}finally{await fs.rm(root,{recursive:true,force:true});}
+});

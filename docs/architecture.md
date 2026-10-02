@@ -32,6 +32,7 @@ Windows画面 → URL検証 → メタデータ取得 → Vertex AIで文字起�
 請求先はログイン中のアカウントではなく、プロジェクトが接続するCloud Billingアカウントで決まる（[公式接続仕様](https://docs.cloud.google.com/billing/docs/how-to/modify-project)、2026-10-02確認）。[増枠申請の公式説明](https://support.google.com/cloud/answer/6330231)では審査時に支払いを求める場合があるため、申請だけで無料の増枠が保証されるとは扱わない。既存プロジェクトの請求先解除はサービス停止につながるため、ユーザー指定なしに行わない。
 
 - [ローカルADCの公式手順](https://docs.cloud.google.com/docs/authentication/set-up-adc-local-dev-environment)を確認。ログイン情報や認証JSONをチャットへ貼らせず、リポジトリに保存しない。
+- 2026-10-02: Google Cloud CLI 587.0.0を公式配布元・Google LLCの有効署名を確認して導入。ブラウザでユーザーがADC認証を完了し、秘密値を表示せず指定アカウントを照合。quota projectを指定の専用プロジェクトへ設定済み。Windowsの実行環境により認証ファイルがアプリのLocalCache内に保存されたため、アプリ起動時のADC探索は別途検証する。認証ファイルの具体的パスと内容は公開設定に含めない。
 - [Google Cloud予算](https://docs.cloud.google.com/billing/docs/how-to/budgets)では通知用予算だけで支出は停止しない。停止上限機能は対象サービスへの適用を別途確認し、アプリ側の概算上限と区別する。
 - [YouTube Data API](https://developers.google.com/youtube/v3/getting-started)と[動画取得](https://developers.google.com/youtube/v3/docs/videos/list)を確認。`videos.list`は1回1単位、検索せずURLから動画IDを使う案。通常の他エンドポイント合算枠は1日10,000単位。投稿日時・長さの取得フィールドと安全なキー制限は接続準備で具体化する。
 
